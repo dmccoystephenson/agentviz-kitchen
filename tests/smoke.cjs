@@ -1,52 +1,153 @@
-// Headless smoke test: serve the fixture, load /?fixture=1, wait for the kit
-// to draw, check there are no console errors, a tap selects an agent, and
-// save docs/media/screenshot.png.
-//   NODE_PATH=/root/arcade-watch/node_modules node tests/smoke.cjs
-const {chromium} = require("playwright");
-const {spawn} = require("child_process");
+// Headless smoke test on the demo feed (vendor/agentviz-kit/tests/harness.cjs):
+// every fixture agent is in the kitchen; the "needs you" chip cycles both
+// waiting sessions and the panel says why each waits; a tap on a chef opens
+// its panel; a stalled cook and a cook's own branch show; feed strings never
+// become HTML; the empty state and the unreachable banner show; the frame is
+// not flat; no console errors. Expected counts come from the feed document.
+//   npm ci && npx playwright install chromium && npm run smoke
 const path = require("path");
+const h = require("../vendor/agentviz-kit/tests/harness.cjs");
 
-const repo = path.resolve(__dirname, "..");
-const port = Number(process.env.PORT || 8942);
+const REPO = path.resolve(__dirname, "..");
+const PORT = Number(process.env.KITCHEN_TEST_PORT || 9101);
+const READY = "window.__page && window.__page.polls > 0 && window.__page.kitchen.entities.size > 0";
 
-function serve() {
-  const p = spawn("python3", ["-m", "vendor.agentfeed", "serve", "--web", "web", "--port", String(port), "--fixture"],
-    {cwd: repo, stdio: ["ignore", "pipe", "inherit"]});
-  return new Promise((resolve, reject) => {
-    p.stdout.on("data", (d) => { if (String(d).includes("serving")) resolve(p); });
-    p.on("exit", (c) => reject(new Error("server exited " + c)));
+function check(cond, message) { if (!cond) throw new Error(message); }
+
+async function checkScene(page) {
+  const info = await page.evaluate(() => {
+    const k = window.__page.kitchen, doc = window.__page.doc, agents = k.agents();
+    return {agents: agents.length, chefs: agents.filter((e) => e.kind === "chef").length, lines: k.lines.length,
+      want: {agents: doc.sessions.length + doc.sessions.reduce((n, s) => n + s.followers.length, 0),
+        chefs: doc.sessions.length, lines: doc.places.length},
+      waiting: doc.sessions.filter((s) => s.state === "waiting").map((s) => ({name: s.name, reason: s.waitingReason}))};
   });
+  console.log("scene:", JSON.stringify(info));
+  check(info.agents === info.want.agents && info.chefs === info.want.chefs && info.lines === info.want.lines,
+    "the kitchen does not hold every fixture agent");
+  check(info.waiting.length >= 2, "the fixture should have at least two sessions waiting");
+  return info;
 }
 
-(async () => {
-  const server = await serve();
-  const browser = await chromium.launch({args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"]});
-  const errors = [];
-  try {
-    const page = await browser.newPage({viewport: {width: 1280, height: 760}});
-    page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
-    page.on("pageerror", (e) => errors.push(String(e)));
-    await page.goto(`http://127.0.0.1:${port}/?fixture=1&drive=1`, {waitUntil: "commit"});
-    await page.waitForFunction(() => window.kitchen && window.kitchen.ready && window.__strataKit && window.__strataKit.ready,
-      null, {timeout: 120000});
-    // ?drive=1: the frame loop does not run; draw scene times ourselves.
-    await page.evaluate(() => { window.kitchen.settle(); for (let i = 1; i <= 3; i++) window.__strataKit.drive(2 + i * 0.1); });
-    const ids = await page.evaluate(() => window.kitchen.ids());
-    if (ids.length < 15) throw new Error("expected the fixture's agents, got " + ids.length);
-    const targets = await page.evaluate(() => window.__strataKit.targets());
-    if (!targets.length) throw new Error("no tap targets");
-    const t = targets[0];
-    const hit = await page.evaluate(([x, y]) => window.__strataKit.pickAt(x, y), [t.x, t.y]);
-    if (!hit) throw new Error("pick at a target found nothing");
-    await page.evaluate((id) => window.kitchen.select(id), hit);
-    await page.waitForSelector("#sheet.open", {timeout: 5000});
-    await page.evaluate(() => window.kitchen.select(null));
-    await page.evaluate(() => window.__strataKit.drive(3));
-    await page.screenshot({path: path.join(repo, "docs/media/screenshot.png")});
-    if (errors.length) throw new Error("console errors:\n" + errors.join("\n"));
-    console.log("smoke OK:", ids.length, "entities,", targets.length, "targets; picked", hit);
-  } finally {
-    await browser.close();
-    server.kill();
+const panel = (page) => page.evaluate(() => {
+  const p = document.querySelector(".av-panel");
+  if (p.hidden) return null;
+  const needs = p.querySelector(".av-needs");
+  return {title: p.querySelector("h2").textContent.trim(), needs: needs && needs.textContent.trim(),
+    rows: [...p.querySelectorAll("dd")].map((d) => d.textContent)};
+});
+
+const REASON = {question: "has a question", permission: "needs permission"};
+
+async function checkWaitingChip(page, waiting) {
+  const chip = page.locator(".av-wait");
+  check(await chip.isVisible(), "the needs-you chip is hidden");
+  check(Number(await chip.locator("b").textContent()) === waiting.length, "the needs-you chip miscounts");
+  const seen = [];
+  for (let i = 0; i < waiting.length; i++) { await chip.click(); seen.push(await panel(page)); }
+  console.log("needs-you chip cycles:", seen.map((p) => p.title + " (" + p.needs + ")").join(" -> "));
+  for (const w of waiting) {
+    const p = seen.find((s) => s.title === w.name);
+    check(p, "the chip did not reach " + w.name);
+    check(p.needs === REASON[w.reason], w.name + "'s panel does not say why it waits");
   }
-})().catch((e) => { console.error(e); process.exit(1); });
+}
+
+async function checkTap(page) {
+  await page.evaluate(() => window.__page.select(null));
+  const hit = await page.evaluate(() => {
+    const p = window.__page, e = p.kitchen.findChef("Otto");
+    p.view({tx: e.x + 3, ty: 1, tz: e.z, yaw: -1.35, pitch: 0.6, dist: 14});
+    p.kit.drive(3);
+    const q = p.kit.project(e.x, 1.2, e.z), r = p.kit.canvas.getBoundingClientRect();
+    return q && {x: q.x + r.left, y: q.y + r.top};
+  });
+  check(hit, "Otto is off screen");
+  await page.mouse.click(hit.x, hit.y);
+  await page.waitForTimeout(300);
+  const p = await panel(page);
+  console.log("tap:", p && p.title);
+  check(p && p.title === "Otto", "a tap on Otto did not open his panel");
+}
+
+// The stalled subagent and the one on its own branch, found in the feed.
+async function checkFollowers(page) {
+  const found = await page.evaluate(() => {
+    const doc = window.__page.doc;
+    let stalled = null, branched = null;
+    for (const s of doc.sessions) for (const f of s.followers) {
+      if (f.stalled && !stalled) stalled = {key: s.id + "/" + f.id, label: f.label};
+      if (f.branch && f.branch !== s.branch && !branched) branched = {key: s.id + "/" + f.id, branch: f.branch};
+    }
+    return {stalled, branched};
+  });
+  check(found.stalled && found.branched, "the fixture should have a stalled subagent and one on its own branch");
+  const stalledLabel = await page.evaluate((key) => {
+    window.__page.select(key, false);
+    const e = window.__page.kitchen.entities.get(key);
+    return {entity: !!e, ticket: [...document.querySelectorAll(".av-label.ticket.stalled")].map((l) => l.textContent)};
+  }, found.stalled.key);
+  console.log("stalled cook:", JSON.stringify(stalledLabel));
+  check(stalledLabel.entity && stalledLabel.ticket.some((t) => t.includes(found.stalled.label)),
+    "the stalled subagent has no stalled ticket");
+  const p = await panel(page);
+  check(p.rows.includes("stalled") || (await page.locator(".av-panel .av-s-stalled").count()) > 0,
+    "the stalled subagent's panel does not say stalled");
+  await page.evaluate((key) => window.__page.select(key, false), found.branched.key);
+  const rows = (await panel(page)).rows;
+  console.log("branched cook rows:", rows.join(" | "));
+  check(rows.includes(found.branched.branch), "the subagent panel does not show its own branch");
+}
+
+async function checkTextOnly(page) {
+  const result = await page.evaluate(() => {
+    const doc = JSON.parse(JSON.stringify(window.__page.doc));
+    const lead = doc.sessions.find((s) => s.followers.length > 0);
+    lead.followers[0].label = "<img src=x id=pwned>";
+    window.__page.feed(doc);
+    window.__page.select(lead.id, false);
+    window.__page.kit.drive(4);
+    const asText = (nodes) => [...nodes].some((n) => n.textContent.includes("<img src=x id=pwned>"));
+    return {img: !!document.getElementById("pwned"), panel: asText(document.querySelectorAll(".av-panel .av-lanes button")),
+      label: asText(document.querySelectorAll(".av-label"))};
+  });
+  console.log("text only:", JSON.stringify(result));
+  check(!result.img && result.panel && result.label, "a feed label was parsed as HTML");
+}
+
+async function checkEmptyState(page) {
+  const shown = await page.evaluate(() => {
+    const doc = JSON.parse(JSON.stringify(window.__page.doc));
+    const sessions = doc.sessions;
+    window.__page.feed(Object.assign(doc, {sessions: []}));
+    const visible = !document.querySelector(".av-empty").hidden;
+    window.__page.feed(Object.assign(doc, {sessions}));
+    return visible && document.querySelector(".av-empty").hidden;
+  });
+  check(shown, "no empty-state hint with zero sessions");
+}
+
+async function checkUnreachable(page) {
+  await page.route("**/api/agents*", (route) => route.fulfill({status: 503, body: "down"}));
+  await page.evaluate(async () => { await window.__page.pollOnce(); await window.__page.pollOnce(); });
+  const banner = await page.evaluate(() => !document.querySelector(".av-banner").hidden && document.querySelector(".av-banner").textContent);
+  console.log("banner:", banner);
+  check(banner && banner.includes("HTTP 503"), "no unreachable banner after failed polls");
+}
+
+h.run("smoke", {repo: REPO, port: PORT}, async ({server, browser}) => {
+  const {page, errors} = await h.open(browser, server.base + "/?fixture=1&drive=1", {ready: READY});
+  await h.stillAnimations(page);
+  await page.evaluate(() => { window.__page.stopPolling(); window.__page.kitchen.settle(); window.__page.kit.drive(2); });
+  const info = await checkScene(page);
+  await checkWaitingChip(page, info.waiting);
+  await checkTap(page);
+  await checkFollowers(page);
+  await checkTextOnly(page);
+  await checkEmptyState(page);
+  await page.evaluate(() => { const p = window.__page; p.select(null); p.kitchen.settle(); p.fit(true); p.kit.drive(5); });
+  const png = await h.shot(page, path.join(REPO, "docs/media/screenshot.png"));
+  console.log("distinct colours:", await h.assertNotFlat(page, png));
+  h.assertNoErrors(errors);
+  await checkUnreachable(page);  // last: the failed fetches log console errors of their own
+});

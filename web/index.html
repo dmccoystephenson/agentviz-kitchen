@@ -4,86 +4,42 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Kitchen brigade</title>
+<link rel="stylesheet" href="agentviz-hud.css">
 <style>
-  :root { color-scheme: dark; --bg: #0b0909; --fg: #f3ece4; --panel: rgba(24, 18, 16, 0.92); --line: rgba(255,255,255,0.12);
-    --red: #ff3b2f; --gold: #f5b942; --paper: #fbf6e3; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
-    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  /* The kitchen's theme for the kit's HUD (agentviz-hud.css): warm panels, red for "order up". */
+  :root { color-scheme: dark; --bg: #0b0909; --paper: #fbf6e3;
+    --av-fg: #f3ece4; --av-muted: #c9b8a6; --av-panel: rgba(24, 18, 16, 0.92); --av-line: rgba(255, 255, 255, 0.12);
+    --av-wait: #ff3b2f; --av-wait-fg: #fff; --av-note: #fff; --av-busy: #ff9a3c; --av-stall: #ff4b3a; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--av-fg); font: var(--av-font); }
   #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
   #labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
-  .lbl { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; transition: opacity .2s; }
-  .chef { font-weight: 600; font-size: 13px; padding: 2px 9px; border-radius: 999px; background: var(--panel);
-    border: 1px solid var(--line); }
-  .chef.offline { opacity: .55; font-weight: 400; }
-  .chef.waiting { background: var(--red); color: #fff; border-color: #fff; font-size: 15px;
-    animation: pulse 1s ease-in-out infinite; box-shadow: 0 0 18px var(--red); }
-  @keyframes pulse { 50% { transform: translate(-50%, -100%) scale(1.12); } }
-  .ticket { font: 11px/1.2 ui-monospace, "SF Mono", Menlo, monospace; color: #2a2118; background: var(--paper);
-    padding: 1px 5px 2px; border-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,.5); max-width: 130px;
-    overflow: hidden; text-overflow: ellipsis; }
-  .ticket.resting { opacity: .7; }
-  .place { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #d9c9b6;
-    background: rgba(0,0,0,.55); padding: 2px 8px; border-radius: 4px; }
+  .av-wait { box-shadow: 0 0 16px var(--av-wait); }
+  @keyframes av-throb { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 47, 0.8); } 50% { box-shadow: 0 0 0 8px rgba(255, 59, 47, 0); } }
+
+  /* World labels: chefs as pills in their brigade colour, cooks as paper tickets, lines as plates. */
+  .av-label.chef { font-weight: 600; font-size: 13px; padding: 2px 9px; }
+  .av-label.chef.offline { opacity: 0.55; font-weight: 400; }
+  .av-label.chef.waiting { background: var(--av-wait); color: var(--av-wait-fg); border-color: #fff; font-size: 15px;
+    box-shadow: 0 0 18px var(--av-wait); animation: kt-pulse 1s ease-in-out infinite; }
+  @keyframes kt-pulse { 50% { transform: translate(-50%, -100%) scale(1.12); } }
+  .av-label.ticket { font: 11px/1.2 ui-monospace, "SF Mono", Menlo, monospace; color: #2a2118; background: var(--paper);
+    padding: 1px 5px 2px; border-radius: 2px; border: 0; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); max-width: 130px;
+    overflow: hidden; text-overflow: ellipsis; display: block; }
+  .av-label.ticket.resting { opacity: 0.7; }
+  .av-label.ticket.stalled { background: #ffd2c8; color: #6a0f05; opacity: 1; }
+  .av-label.place { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #d9c9b6;
+    background: rgba(0, 0, 0, 0.55); padding: 2px 8px; border-radius: 4px; border: 0; }
   .sk-label-off { opacity: 0 !important; }
 
-  #hud { position: fixed; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left));
-    right: max(10px, env(safe-area-inset-right)); display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-    pointer-events: none; }
-  #hud > * { pointer-events: auto; }
-  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px;
-    font-size: 13px; display: inline-flex; gap: 6px; align-items: center; color: var(--fg); }
-  button.chip { cursor: pointer; font: inherit; font-size: 13px; }
-  #order.hot { background: var(--red); border-color: #fff; color: #fff; font-weight: 700;
-    animation: pulse2 1s ease-in-out infinite; box-shadow: 0 0 16px var(--red); }
-  @keyframes pulse2 { 50% { transform: scale(1.08); } }
-  #title { font-weight: 700; }
-  #demo { background: #4a3b10; color: var(--gold); }
-  .spacer { flex: 1; }
-
-  #sheet { position: fixed; left: 50%; bottom: 0; transform: translate(-50%, 110%); width: min(420px, 100%);
-    box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-bottom: 0;
-    border-radius: 16px 16px 0 0; padding: 10px 16px max(16px, env(safe-area-inset-bottom));
-    transition: transform .25s ease; max-height: 55vh; overflow: auto; backdrop-filter: blur(6px); }
-  #sheet.open { transform: translate(-50%, 0); }
-  @media (min-width: 760px) {
-    #sheet { left: auto; right: 16px; bottom: 16px; transform: translateX(130%); border-radius: 14px;
-      border-bottom: 1px solid var(--line); width: 340px; }
-    #sheet.open { transform: none; }
-  }
-  #sheet .grip { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.25); margin: 0 auto 8px; }
-  #sheet h2 { margin: 0; font-size: 20px; display: flex; align-items: center; gap: 8px; }
-  #sheet .close { margin-left: auto; background: none; border: 0; color: var(--fg); font-size: 22px; cursor: pointer;
-    min-width: 44px; min-height: 44px; }
-  .row { display: flex; gap: 10px; align-items: center; padding: 5px 0; border-top: 1px solid var(--line); }
-  .row .ic { font-size: 20px; width: 28px; text-align: center; }
-  .row .k { opacity: .65; font-size: 12px; min-width: 56px; }
-  .state-waiting { color: #fff; background: var(--red); border-radius: 6px; padding: 0 6px; font-weight: 700; }
-  .follow { display: flex; gap: 8px; align-items: center; padding: 3px 0; cursor: pointer; }
-  .follow .t { font: 12px ui-monospace, Menlo, monospace; background: var(--paper); color: #2a2118; padding: 0 5px;
-    border-radius: 2px; }
-
-  #legend { position: fixed; top: 54px; right: max(10px, env(safe-area-inset-right)); width: min(330px, calc(100% - 20px));
-    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; display: none;
-    max-height: calc(100% - 80px); overflow: auto; box-sizing: border-box; }
-  #legend.open { display: block; }
-  #legend table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  #legend td { padding: 3px 4px; border-top: 1px solid var(--line); vertical-align: top; }
-  #legend td:first-child { font-size: 18px; width: 28px; text-align: center; }
+  .av-legend table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .av-legend td { padding: 3px 4px; border-top: 1px solid var(--av-line); vertical-align: top; }
+  .av-legend td:first-child { font-size: 18px; width: 28px; text-align: center; }
 </style>
 </head>
 <body>
 <canvas id="view" tabindex="0" role="img" aria-label="Claude Code sessions as a restaurant kitchen, drawn by Strata"></canvas>
 <div id="labels" aria-hidden="true"></div>
-<div id="hud">
-  <span class="chip" id="title">👨‍🍳 Kitchen</span>
-  <span class="chip" id="demo" hidden>demo feed</span>
-  <span class="chip" id="busy" title="busy chefs">🔥 0</span>
-  <span class="chip" id="cooks" title="active line cooks">🧑‍🍳 0</span>
-  <button class="chip" id="order" hidden title="needs you: tap to go to the pass">🔔 0</button>
-  <span class="spacer"></span>
-  <button class="chip" id="legendBtn" aria-expanded="false" title="what the kitchen means">?</button>
-</div>
-<div id="legend" role="dialog" aria-label="Legend">
+<aside id="legend" hidden aria-label="What the kitchen means">
   <table>
     <tr><td>👨‍🍳</td><td><b>Head chef</b> at the pass = a session. Its line = the repo.</td></tr>
     <tr><td>🧑‍🍳</td><td><b>Line cook</b> = a subagent; same apron colour as its chef, ticket on the rail = its lane.</td></tr>
@@ -94,16 +50,24 @@
     <tr><td>📣</td><td>Arm up, tickets flying to stations = <b>delegate</b></td></tr>
     <tr><td>🥄</td><td>Tasting from a bowl = <b>think</b></td></tr>
     <tr><td>🧽</td><td>Wiping the counter = <b>other</b></td></tr>
-    <tr><td>🔔</td><td><b>Waiting on you</b>: red heat lamp, plate up, bell ringing</td></tr>
-    <tr><td>☕</td><td>Leaning on the counter = resting cook</td></tr>
+    <tr><td>✨</td><td>A flare of sparks over the burner = a new tool call just now</td></tr>
+    <tr><td>🔔</td><td><b>Needs permission</b>: red heat lamp, a plate up for your sign-off, bell ringing</td></tr>
+    <tr><td>❓</td><td><b>Has a question</b>: red heat lamp, bell ringing, the chef holds up a ticket with a red "?"</td></tr>
+    <tr><td>☕</td><td>Leaning on the counter with a mug = resting cook</td></tr>
     <tr><td>🧊</td><td>Clean stations, burners off = idle</td></tr>
     <tr><td>🌑</td><td>Dark pass, hanging apron = offline</td></tr>
-    <tr><td>💨</td><td>Pot boiling over, red smoke = stalled</td></tr>
+    <tr><td>💨</td><td>Pot boiling over, red smoke = stalled (a chef busy, or a cook quiet, for 5+ min)</td></tr>
+    <tr><td>📌</td><td>Spike at the head of the line: spent tickets, taller the more tool calls the repo has seen</td></tr>
   </table>
-</div>
-<aside id="sheet" aria-live="polite"><div class="grip"></div><div id="sheetBody"></div></aside>
+</aside>
 <script src="strata-loader.js"></script>
 <script src="strata-kit.js"></script>
-<script src="kitchen.js"></script>
+<script src="agentviz-feed.js"></script>
+<script src="agentviz-screen.js"></script>
+<script src="agentviz-hud.js"></script>
+<script src="agentviz-wire.js"></script>
+<script src="kitchen-model.js"></script>
+<script src="kitchen-frame.js"></script>
+<script src="page.js"></script>
 </body>
 </html>

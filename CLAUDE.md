@@ -1,13 +1,23 @@
-# agentviz-kitchen
+# CLAUDE.md
 
-A Strata web-kit scene: Claude Code sessions as a restaurant kitchen.
+agentviz-kitchen: Claude Code sessions drawn as a restaurant kitchen brigade
+(Strata web kit). Part of the agentviz family: https://github.com/dmccoystephenson/agentviz
 
-- Data comes only from `/api/agents` (see `vendor/agentfeed`, schema in
-  https://github.com/dmccoystephenson/agentviz docs/FEED.md). Never edit
-  `vendor/agentfeed/`; re-vendor with agentviz's `tools/vendor-feed.sh`.
-- Scene: `scene/main.cpp`; build with `scene/build.sh` (needs emsdk 6.0.11);
-  commit the built `web/kitchen-engine.{js,wasm}`.
-- Run: `python3 -m vendor.agentfeed serve --web web --port 8842 --fixture`.
-- Test: `python3 -m unittest discover -s tests` and
-  `NODE_PATH=/root/arcade-watch/node_modules node tests/smoke.cjs`.
-- Screenshots come from the fixture feed only, never live sessions.
+- Data comes only from `/api/agents` (vendor/agentfeed; schema in the agentviz repo's docs/FEED.md).
+- Shared pieces come from the agentviz kit (docs/KIT.md there): `vendor/agentviz-kit/` and the
+  `web/agentviz-*` copies. Never edit `vendor/` or `web/agentviz-*`; re-vendor from an agentviz
+  checkout with `tools/vendor-kit.sh <this repo>`. `tests/test_serve.py` checks the PINs.
+- Page: `web/kitchen-model.js` lays out lines, passes and stations and eases them;
+  `web/kitchen-frame.js` packs each frame in the agentviz wire format; `web/page.js` boots the feed
+  client, HUD, labels and camera; `web/index.html` holds the theme and the legend.
+- Scene: `scene/main.cpp` decodes the wire (`agentviz.h`) and calls `line.h`, `chef.h`,
+  `station.h` (shared bits in `draw_util.h`, `person.h`). Build:
+  `EMSDK=/path/to/emsdk vendor/agentviz-kit/scene/build-scene.sh scene/kit.conf`
+  (emsdk 6.0.11, Strata 0.10.0). The built `web/kitchen-engine.*` are committed.
+- Run: `python3 -m vendor.agentfeed serve --web web --port 8842 [--fixture]`.
+- Tests: `python3 -m unittest discover -s tests`; browser tests after `npm ci` and
+  `npx playwright install chromium`: `npm run smoke`, `npm run screenshots` (Pillow from
+  requirements-dev.txt for the GIF). Tests use port 9101 (`KITCHEN_TEST_PORT` overrides).
+- Screenshots come from the FIXTURE feed only, never live sessions.
+- While the repo is private, hosted Actions are billing-blocked: run localci on PRs
+  (drop this line once it is public).

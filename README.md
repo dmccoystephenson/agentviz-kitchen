@@ -40,10 +40,13 @@ Query options: `?fixture=1` (demo feed), `?demo=1` (demo feed with scripted
 changes, to watch cooks switch tasks and new tool calls flare), `?fps=1`
 (frame stats), `?quality=0|1|2`.
 
-Drag to orbit, right-drag or two fingers to pan, wheel or pinch to zoom. Tap
-a chef or a cook to select it: a white ring marks it, the camera eases over,
-and a card (a bottom sheet on a phone; swipe it down or tap the cross to
-close) shows its state, what it is doing, its tool, branch and line, and for
+Each chef's name pill leads with a state dot (orange busy, grey idle, red
+stalled) and, while busy, the icon of what it is doing; each cook's ticket
+carries the same icon. Drag to orbit, right-drag or two fingers to pan, wheel
+or pinch to zoom. Tap a chef or a cook to select it: a white ring marks it,
+the camera eases over (on a phone it parks the pick in the upper part of the
+screen, clear of the sheet), and a card (a bottom sheet on a phone; swipe it
+down or tap the cross to close) shows its state, what it is doing, its tool, branch and line, and for
 a chef its cooks as chips you can tap to jump to. The red **need you** chip
 names who is waiting and why (a question, or a permission prompt) and cycles
 through them; the house button recentres; **?** opens the legend. If the feed
@@ -54,6 +57,7 @@ sessions at all, a hint says how to start.
 
 | You see | It means | Close-up |
 |---|---|---|
+| Red quarry tiles, a metre each, under the whole kitchen | the room | [top](docs/media/angle-top.png) |
 | A kitchen line (counter, tiled backsplash, place name at its head) | one place (repo / working directory) | [hero](docs/media/hero.png) |
 | A spike of spent tickets at the head of the line | the repo's tool calls so far: one more ticket per doubling | [brigade](docs/media/closeup-brigade.png) |
 | A head chef in a tall toque at a pass under a heat lamp | one session | [brigade](docs/media/closeup-brigade.png) |
@@ -138,8 +142,10 @@ branch, what it is up to at the pass, and its cooks as chips.*
 
 <img src="docs/media/phone.png" width="320" alt="Phone portrait with the bottom sheet open on Thistle">
 
-*Phone portrait (390 x 844, DPR 3): the lines stack top to bottom, touch
-orbit and pinch, and the bottom sheet open on Thistle, who needs permission.*
+*Phone portrait (390 x 844, DPR 3): the top bar keeps to one line (the
+title and the idle and away counts give way to the scene), the lines stack
+top to bottom, and a tap on Thistle, who needs permission, parks her above
+the bottom sheet. Labels never sit under the bar or the sheet.*
 
 ## Build and test
 

@@ -66,6 +66,11 @@ inline void drawLine(Host& h, const agentviz::Zone& zone, float t) {
 inline void drawFloor(Host& h, const float* scene) {
     const float x0 = scene[0], x1 = scene[1], z0 = scene[2], z1 = scene[3];
     h.add(STRATA_PRIMITIVE_CUBE, (x0 + x1) * 0.5f, -0.05f, (z0 + z1) * 0.5f, x1 - x0, 0.1f, z1 - z0, kFloor);
+    // Grout between the quarry tiles, a metre apart, so the floor reads as a
+    // kitchen's and gives the room its scale. Tiles line up with world x / z.
+    const Rgb grout{0.42f, 0.24f, 0.17f};
+    for (float gx = std::ceil(x0); gx <= x1; gx += 1.0f) h.line(gx, 0.004f, z0, gx, 0.004f, z1, grout, 0.8f);
+    for (float gz = std::ceil(z0); gz <= z1; gz += 1.0f) h.line(x0, 0.004f, gz, x1, 0.004f, gz, grout, 0.8f);
 }
 
 inline void drawZones(Host& h, const std::vector<agentviz::Zone>& zones, float t) {

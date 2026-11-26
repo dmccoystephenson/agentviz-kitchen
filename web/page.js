@@ -61,7 +61,16 @@
     for (const key of Object.keys(camAnim.to)) kit.cam[key] = AgentvizFeed.lerp(camAnim.from[key], camAnim.to[key], e);
     if (k >= 1) camAnim = null;
   }
-  function focusOn(e) { flyTo({tx: e.tx, tz: e.tz, ty: 1, dist: Math.min(kit.cam.dist, 13)}); }
+  // On a phone the card is a bottom sheet over the lower half, so the camera
+  // aims a little nearer than the agent and the agent lands in the upper part
+  // of the screen, clear of the sheet. SHEET_LIFT is that screen shift, as a
+  // share of the distance, before the pitch correction.
+  const SHEET = matchMedia("(max-width: 640px)"), SHEET_LIFT = 0.26;
+  function focusOn(e) {
+    const dist = Math.min(kit.cam.dist, 13);
+    const back = SHEET.matches ? SHEET_LIFT * dist / Math.max(0.35, Math.sin(kit.cam.pitch)) : 0;
+    flyTo({tx: e.tx + Math.cos(kit.cam.yaw) * back, tz: e.tz + Math.sin(kit.cam.yaw) * back, ty: 1, dist});
+  }
 
   /* ------------------------------------------------------------ labels */
   function accentCss(seed) { return "hsl(" + Math.round((seed * 360) % 360) + " 65% 50%)"; }
@@ -70,14 +79,16 @@
     const s = e.session, waiting = s.state === "waiting", offline = s.state === "offline";
     const text = waiting ? (REASON_ICON[s.waitingReason] || "🔔 ") + s.name + " " + (REASON[s.waitingReason] || "needs you")
       : (s.stalled ? "💨 " : "") + (s.name || s.id);
-    const el = labels.set("a:" + e.id, {cls: "chef " + s.state, text});
+    const el = labels.set("a:" + e.id, {cls: "chef " + s.state, text, state: waiting ? null : s.stalled ? "stalled" : s.state,
+      action: s.state === "busy" ? s.action : null});
     el.style.borderColor = waiting ? "" : accentCss(s.seed);
     return {el, q: kit.project(e.x, offline ? 2.4 : 2.75, e.z), rank: waiting ? -1 : e.id === selectedId ? 0 : 1};
   }
   function ticketLabel(e) {
     const f = e.follower;
     const cls = "ticket" + (f.state === "resting" ? " resting" : "") + (f.stalled ? " stalled" : "");
-    const el = labels.set("a:" + e.id, {cls, text: (f.stalled ? "💨 " : "") + (f.label || "subagent")});
+    const el = labels.set("a:" + e.id, {cls, text: (f.stalled ? "💨 " : "") + (f.label || "subagent"),
+      action: f.state === "active" ? f.action : null});
     return {el, q: kit.project(e.x, 2.45, e.z + 0.55), rank: e.id === selectedId ? 0 : 2};
   }
   function placeLabels() {
@@ -92,7 +103,26 @@
       items.push(e.kind === KIND.chef ? chefLabel(e) : ticketLabel(e));
     }
     labels.end();
-    StrataKit.placeLabels(items);
+    StrataKit.placeLabels(clearOfHud(items));
+  }
+
+  // Labels never sit under the top bar or the open card / bottom sheet: one
+  // whose anchor falls there is hidden (a waiting chef's too; the chip names it).
+  function clearOfHud(items) {
+    const r = canvas.getBoundingClientRect(), top = barBottom() - r.top, bottom = sheetTop() - r.top;
+    for (const it of items) if (it.q && (it.q.y - 18 < top || it.q.y > bottom)) it.q = null;
+    return items;
+  }
+  function barBottom() {
+    const bar = document.querySelector(".av-bar");
+    return bar ? bar.getBoundingClientRect().bottom + 4 : 0;
+  }
+  // The top of the bottom sheet when it is open on a phone (full width), else the window's foot.
+  function sheetTop() {
+    const panel = document.querySelector(".av-panel");
+    if (!panel || panel.hidden) return innerHeight;
+    const p = panel.getBoundingClientRect();
+    return p.width >= innerWidth - 2 ? p.top : innerHeight;
   }
 
   /* ------------------------------------------------------------ picking + selection */

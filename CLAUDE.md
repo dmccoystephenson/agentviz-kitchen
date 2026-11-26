@@ -19,5 +19,3 @@ agentviz-kitchen: Claude Code sessions drawn as a restaurant kitchen brigade
   `npx playwright install chromium`: `npm run smoke`, `npm run screenshots` (Pillow from
   requirements-dev.txt for the GIF). Tests use port 9101 (`KITCHEN_TEST_PORT` overrides).
 - Screenshots come from the FIXTURE feed only, never live sessions.
-- While the repo is private, hosted Actions are billing-blocked: run localci on PRs
-  (drop this line once it is public).

@@ -61,15 +61,16 @@
     for (const key of Object.keys(camAnim.to)) kit.cam[key] = AgentvizFeed.lerp(camAnim.from[key], camAnim.to[key], e);
     if (k >= 1) camAnim = null;
   }
-  // On a phone the card is a bottom sheet over the lower half, so the camera
-  // aims a little nearer than the agent and the agent lands in the upper part
-  // of the screen, clear of the sheet. SHEET_LIFT is that screen shift, as a
-  // share of the distance, before the pitch correction.
-  const SHEET = matchMedia("(max-width: 640px)"), SHEET_LIFT = 0.26;
+  // Moves in on an agent. On a phone the card is a bottom sheet over the
+  // lower half, so the agent is framed in the part above it.
+  const SHEET = matchMedia("(max-width: 640px)");
   function focusOn(e) {
     const dist = Math.min(kit.cam.dist, 13);
-    const back = SHEET.matches ? SHEET_LIFT * dist / Math.max(0.35, Math.sin(kit.cam.pitch)) : 0;
-    flyTo({tx: e.tx + Math.cos(kit.cam.yaw) * back, tz: e.tz + Math.sin(kit.cam.yaw) * back, ty: 1, dist});
+    let tx = e.tx, tz = e.tz;
+    if (SHEET.matches) {
+      ({tx, tz} = AgentvizScreen.reveal(kit.cam, [e.tx, 1, e.tz], hud.freeRect(canvas), {set: {dist, ty: 1}, force: true}));
+    }
+    flyTo({tx, tz, ty: 1, dist});
   }
 
   /* ------------------------------------------------------------ labels */
@@ -106,23 +107,13 @@
     StrataKit.placeLabels(clearOfHud(items));
   }
 
-  // Labels never sit under the top bar or the open card / bottom sheet: one
-  // whose anchor falls there is hidden (a waiting chef's too; the chip names it).
+  // Labels never sit under the top bar or the bottom sheet: one whose anchor
+  // falls there is hidden (a waiting chef's too; the chip names it).
   function clearOfHud(items) {
-    const r = canvas.getBoundingClientRect(), top = barBottom() - r.top, bottom = sheetTop() - r.top;
+    const r = canvas.getBoundingClientRect(), {top} = hud.clearArea(canvas), p = hud.panelRect();
+    const bottom = (p && p.sheet ? p.y0 : innerHeight) - r.top;
     for (const it of items) if (it.q && (it.q.y - 18 < top || it.q.y > bottom)) it.q = null;
     return items;
-  }
-  function barBottom() {
-    const bar = document.querySelector(".av-bar");
-    return bar ? bar.getBoundingClientRect().bottom + 4 : 0;
-  }
-  // The top of the bottom sheet when it is open on a phone (full width), else the window's foot.
-  function sheetTop() {
-    const panel = document.querySelector(".av-panel");
-    if (!panel || panel.hidden) return innerHeight;
-    const p = panel.getBoundingClientRect();
-    return p.width >= innerWidth - 2 ? p.top : innerHeight;
   }
 
   /* ------------------------------------------------------------ picking + selection */
@@ -155,6 +146,7 @@
 
   const hud = AgentvizHud.create({
     title: "Kitchen brigade",
+    oneRow: true,
     legend: document.getElementById("legend"),
     buttons: [{icon: "home", label: "Recentre the view", onClick: () => fit(false)}],
     onSelect,

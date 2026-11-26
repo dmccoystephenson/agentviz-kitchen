@@ -30,6 +30,21 @@
   .av-label.place { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #d9c9b6;
     background: rgba(0, 0, 0, 0.55); padding: 2px 8px; border-radius: 4px; border: 0; }
   .sk-label-off { opacity: 0 !important; }
+  /* A chef's pill leads with its state dot and what it is doing; idle chefs step back. */
+  .av-label.chef .av-ic { width: 13px; height: 13px; }
+  .av-label.chef.idle, .av-label.chef.dim { opacity: 0.78; font-weight: 500; }
+  .av-label.chef.waiting .av-dot { background: #fff; }
+  .av-label.ticket .av-ic { width: 11px; height: 11px; color: #6b4a2a; vertical-align: -1px; margin-right: 4px; }
+  .av-label.ticket.stalled .av-ic { color: #6a0f05; }
+
+  /* Phone: the top bar keeps to one line. The title, idle and away counts give way to the scene
+     (the card and the legend still say all of it), and the demo badge shortens to "demo". */
+  @media (max-width: 640px) {
+    .av-bar { flex-wrap: nowrap; }
+    .av-bar .av-title, .av-bar > .av-chip[title="idle"], .av-bar > .av-chip[title="away"] { display: none; }
+    .av-bar .av-badge { font-size: 0; gap: 0; }
+    .av-bar .av-badge::after { content: "demo"; font-size: 12px; }
+  }
 
   .av-legend table { border-collapse: collapse; width: 100%; font-size: 13px; }
   .av-legend td { padding: 3px 4px; border-top: 1px solid var(--av-line); vertical-align: top; }

@@ -71,7 +71,7 @@ async function desktopStills(browser, server) {
 async function phone(browser, server) {
   if (!want("phone")) return;
   const {ctx, page, errors} = await openPage(browser, server, PHONE);
-  await shoot(page, "phone", 7.0, `window.__page.fit(true); window.__page.select(window.__page.kitchen.findChef("Thistle").id)`);
+  await shoot(page, "phone", 7.0, `window.__page.fit(true); window.__page.select(window.__page.kitchen.findChef("Thistle").id, true)`);
   h.assertNoErrors(errors);
   await ctx.close();
 }
